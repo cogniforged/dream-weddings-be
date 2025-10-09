@@ -34,7 +34,10 @@ export class UsersController {
   @ApiParam({ name: 'vendorId', description: 'Vendor ID' })
   @ApiResponse({ status: 201, description: 'Inquiry sent successfully' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 403, description: 'Forbidden - Customer role required' })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden',
+  })
   @ApiBody({ description: 'Inquiry data' })
   async sendInquiry(
     @Request() req,
@@ -52,8 +55,13 @@ export class UsersController {
   @ApiParam({ name: 'vendorId', description: 'Vendor ID' })
   @ApiResponse({ status: 201, description: 'Vendor added to favorites' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 403, description: 'Forbidden - Customer role required' })
-  @ApiBody({ schema: { type: 'object', properties: { notes: { type: 'string' } } } })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden',
+  })
+  @ApiBody({
+    schema: { type: 'object', properties: { notes: { type: 'string' } } },
+  })
   async addToFavorites(
     @Request() req,
     @Param('vendorId') vendorId: string,
@@ -70,7 +78,10 @@ export class UsersController {
   @ApiParam({ name: 'vendorId', description: 'Vendor ID' })
   @ApiResponse({ status: 200, description: 'Vendor removed from favorites' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 403, description: 'Forbidden - Customer role required' })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden',
+  })
   async removeFromFavorites(
     @Request() req,
     @Param('vendorId') vendorId: string,
@@ -85,7 +96,10 @@ export class UsersController {
   @ApiOperation({ summary: 'Get user favorites' })
   @ApiResponse({ status: 200, description: 'Favorites retrieved successfully' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 403, description: 'Forbidden - Customer role required' })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden',
+  })
   async getFavorites(@Request() req) {
     return this.usersService.getFavorites(req.user._id);
   }
@@ -98,7 +112,10 @@ export class UsersController {
   @ApiParam({ name: 'vendorId', description: 'Vendor ID' })
   @ApiResponse({ status: 201, description: 'Review submitted successfully' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 403, description: 'Forbidden - Customer role required' })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden',
+  })
   @ApiBody({ description: 'Review data' })
   async submitReview(
     @Request() req,
@@ -115,7 +132,10 @@ export class UsersController {
   @ApiOperation({ summary: 'Get user inquiries' })
   @ApiResponse({ status: 200, description: 'Inquiries retrieved successfully' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 403, description: 'Forbidden - Customer role required' })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden',
+  })
   async getMyInquiries(@Request() req) {
     return this.usersService.getMyInquiries(req.user._id);
   }
@@ -127,7 +147,10 @@ export class UsersController {
   @ApiOperation({ summary: 'Get user reviews' })
   @ApiResponse({ status: 200, description: 'Reviews retrieved successfully' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 403, description: 'Forbidden - Customer role required' })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden',
+  })
   async getMyReviews(@Request() req) {
     return this.usersService.getMyReviews(req.user._id);
   }
@@ -137,9 +160,15 @@ export class UsersController {
   @Roles(UserRole.CUSTOMER)
   @ApiBearerAuth('JWT-auth')
   @ApiOperation({ summary: 'Update wedding details' })
-  @ApiResponse({ status: 200, description: 'Wedding details updated successfully' })
+  @ApiResponse({
+    status: 200,
+    description: 'Wedding details updated successfully',
+  })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 403, description: 'Forbidden - Customer role required' })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden',
+  })
   @ApiBody({ description: 'Wedding details data' })
   async updateWeddingDetails(@Request() req, @Body() weddingData: any) {
     return this.usersService.updateWeddingDetails(req.user._id, weddingData);

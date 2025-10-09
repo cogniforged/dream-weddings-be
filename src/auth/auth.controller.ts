@@ -24,8 +24,14 @@ import {
   UpdateProfileDto,
 } from './dto/auth.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
-import { Roles } from './decorators/roles.decorator';
-import { UserRole } from '../schemas/user.schema';
+import { VendorAuthGuard } from './guards/vendor-auth.guard';
+import { Public } from './decorators/public.decorator';
+import { UserDocument } from '../schemas/user.schema';
+import { Types } from 'mongoose';
+
+interface AuthenticatedRequest extends Request {
+  user: UserDocument & { _id: Types.ObjectId };
+}
 
 @ApiTags('auth')
 @Controller('auth')
@@ -33,6 +39,7 @@ export class AuthController {
   constructor(private authService: AuthService) {}
 
   @Post('register')
+  @Public()
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Register a new user' })
   @ApiResponse({ status: 201, description: 'User registered successfully' })
@@ -43,13 +50,44 @@ export class AuthController {
   }
 
   @Post('login')
+  @Public()
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Login user' })
+  @ApiOperation({ summary: 'Login user (deprecated - use specific endpoints)' })
   @ApiResponse({ status: 200, description: 'Login successful' })
   @ApiResponse({ status: 401, description: 'Invalid credentials' })
   @ApiBody({ type: LoginDto })
   async login(@Body() loginDto: LoginDto) {
     return this.authService.login(loginDto);
+  }
+
+  @Post('customer/login')
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Login customer' })
+  @ApiResponse({ status: 200, description: 'Customer login successful' })
+  @ApiResponse({ status: 401, description: 'Invalid credentials' })
+  @ApiResponse({
+    status: 403,
+    description: 'Access denied',
+  })
+  @ApiBody({ type: LoginDto })
+  async customerLogin(@Body() loginDto: LoginDto) {
+    return this.authService.customerLogin(loginDto);
+  }
+
+  @Post('vendor/login')
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Login vendor' })
+  @ApiResponse({ status: 200, description: 'Vendor login successful' })
+  @ApiResponse({ status: 401, description: 'Invalid credentials' })
+  @ApiResponse({
+    status: 403,
+    description: 'Access denied',
+  })
+  @ApiBody({ type: LoginDto })
+  async vendorLogin(@Body() loginDto: LoginDto) {
+    return this.authService.vendorLogin(loginDto);
   }
 
   @Get('profile')
@@ -58,8 +96,10 @@ export class AuthController {
   @ApiOperation({ summary: 'Get user profile' })
   @ApiResponse({ status: 200, description: 'Profile retrieved successfully' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  async getProfile(@Request() req) {
-    return this.authService.getProfile(req.user._id);
+  async getProfile(
+    @Request() req: AuthenticatedRequest,
+  ): Promise<UserDocument> {
+    return this.authService.getProfile(req.user._id.toString());
   }
 
   @Put('profile')
@@ -70,10 +110,13 @@ export class AuthController {
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiBody({ type: UpdateProfileDto })
   async updateProfile(
-    @Request() req,
+    @Request() req: AuthenticatedRequest,
     @Body() updateProfileDto: UpdateProfileDto,
-  ) {
-    return this.authService.updateProfile(req.user._id, updateProfileDto);
+  ): Promise<UserDocument> {
+    return this.authService.updateProfile(
+      req.user._id.toString(),
+      updateProfileDto,
+    );
   }
 
   @Put('change-password')
@@ -84,11 +127,11 @@ export class AuthController {
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiBody({ type: ChangePasswordDto })
   async changePassword(
-    @Request() req,
+    @Request() req: AuthenticatedRequest,
     @Body() changePasswordDto: ChangePasswordDto,
-  ) {
+  ): Promise<{ message: string }> {
     await this.authService.changePassword(
-      req.user._id,
+      req.user._id.toString(),
       changePasswordDto.currentPassword,
       changePasswordDto.newPassword,
     );
@@ -96,14 +139,16 @@ export class AuthController {
   }
 
   @Get('vendor/stats')
-  @UseGuards(JwtAuthGuard)
-  @Roles(UserRole.VENDOR)
+  @UseGuards(VendorAuthGuard)
   @ApiBearerAuth('JWT-auth')
   @ApiOperation({ summary: 'Get vendor statistics' })
-  @ApiResponse({ status: 200, description: 'Vendor stats retrieved successfully' })
+  @ApiResponse({
+    status: 200,
+    description: 'Vendor stats retrieved successfully',
+  })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 403, description: 'Forbidden - Vendor role required' })
-  async getVendorStats(@Request() req) {
-    return this.authService.getVendorStats(req.user._id);
+  @ApiResponse({ status: 403, description: 'Forbidden' })
+  async getVendorStats(@Request() req: AuthenticatedRequest): Promise<any> {
+    return this.authService.getVendorStats(req.user._id.toString());
   }
 }

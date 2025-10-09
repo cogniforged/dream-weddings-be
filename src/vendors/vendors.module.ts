@@ -1,10 +1,11 @@
-import { Module } from '@nestjs/common';
+import { Module, MiddlewareConsumer, NestModule } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { VendorsController } from './vendors.controller';
 import { VendorsService } from './vendors.service';
 import { User, UserSchema } from '../schemas/user.schema';
 import { Lead, LeadSchema } from '../schemas/lead.schema';
 import { Review, ReviewSchema } from '../schemas/review.schema';
+import { VendorAccessMiddleware } from '../auth/middleware/vendor-access.middleware';
 
 @Module({
   imports: [
@@ -18,4 +19,8 @@ import { Review, ReviewSchema } from '../schemas/review.schema';
   providers: [VendorsService],
   exports: [VendorsService],
 })
-export class VendorsModule {}
+export class VendorsModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(VendorAccessMiddleware).forRoutes('vendors');
+  }
+}

@@ -1,7 +1,6 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { APP_GUARD } from '@nestjs/core';
 
@@ -27,24 +26,12 @@ import { RolesGuard } from './auth/guards/roles.guard';
     // Database
     MongooseModule.forRootAsync({
       imports: [ConfigModule],
-      useFactory: async (configService: ConfigService) => ({
+      useFactory: (configService: ConfigService) => ({
         uri:
           configService.get<string>('MONGODB_URI') ||
           'mongodb://localhost:27017/dream-weddings',
         useNewUrlParser: true,
         useUnifiedTopology: true,
-      }),
-      inject: [ConfigService],
-    }),
-
-    // JWT Configuration
-    JwtModule.registerAsync({
-      imports: [ConfigModule],
-      useFactory: async (configService: ConfigService) => ({
-        secret: configService.get<string>('JWT_SECRET') || 'your-secret-key',
-        signOptions: {
-          expiresIn: configService.get<string>('JWT_EXPIRES_IN') || '24h',
-        },
       }),
       inject: [ConfigService],
     }),

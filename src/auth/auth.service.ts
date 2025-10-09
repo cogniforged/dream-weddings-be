@@ -10,7 +10,8 @@ import { RegisterDto, LoginDto } from './dto/auth.dto';
 export class AuthService {
   constructor(
     @InjectModel(User.name) private userModel: Model<UserDocument>,
-    private jwtService: JwtService,
+    private customerJwtService: JwtService,
+    private vendorJwtService: JwtService,
   ) {}
 
   async register(
@@ -46,8 +47,11 @@ export class AuthService {
     const user = new this.userModel(userData);
     await user.save();
 
-    // Generate JWT token
-    const token = this.generateToken(user);
+    // Generate JWT token based on role
+    const token =
+      user.role === UserRole.CUSTOMER
+        ? this.generateCustomerToken(user)
+        : this.generateVendorToken(user);
 
     // Return user without password
     const userResponse = user.toObject();
@@ -81,8 +85,11 @@ export class AuthService {
     user.lastLogin = new Date();
     await user.save();
 
-    // Generate JWT token
-    const token = this.generateToken(user);
+    // Generate JWT token based on role
+    const token =
+      user.role === UserRole.CUSTOMER
+        ? this.generateCustomerToken(user)
+        : this.generateVendorToken(user);
 
     // Return user without password
     const userResponse = user.toObject();
@@ -92,15 +99,15 @@ export class AuthService {
     return { user: userWithoutPassword, token };
   }
 
-  async validateUser(userId: string): Promise<any> {
-    const user = await this.userModel.findById(userId);
+  async validateUser(userId: string): Promise<UserDocument | null> {
+    const user = await this.userModel.findById(userId).exec();
     if (!user || !user.isActive) {
       return null;
     }
     return user;
   }
 
-  async getProfile(userId: string): Promise<any> {
+  async getProfile(userId: string): Promise<UserDocument> {
     const user = await this.userModel.findById(userId).select('-password');
     if (!user) {
       throw new UnauthorizedException('User not found');
@@ -108,7 +115,10 @@ export class AuthService {
     return user;
   }
 
-  async updateProfile(userId: string, updateData: any): Promise<any> {
+  async updateProfile(
+    userId: string,
+    updateData: Partial<UserDocument>,
+  ): Promise<UserDocument> {
     const user = await this.userModel.findByIdAndUpdate(
       userId,
       { ...updateData, updatedAt: new Date() },
@@ -148,15 +158,116 @@ export class AuthService {
     await user.save();
   }
 
-  private generateToken(user: UserDocument): string {
+  async customerLogin(
+    loginDto: LoginDto,
+  ): Promise<{ user: any; token: string }> {
+    const { email, password: loginPassword } = loginDto;
+
+    // Find user
+    const user = await this.userModel.findOne({ email });
+    if (!user) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    // Check if user is active
+    if (!user.isActive) {
+      throw new UnauthorizedException('Account is deactivated');
+    }
+
+    // Verify password
+    const isPasswordValid = await bcrypt.compare(loginPassword, user.password);
+    if (!isPasswordValid) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    // Check if user is a customer
+    if (user.role !== UserRole.CUSTOMER) {
+      throw new UnauthorizedException('Invalid username or password');
+    }
+
+    // Update last login
+    user.lastLogin = new Date();
+    await user.save();
+
+    // Generate JWT token with customer-specific payload
+    const token = this.generateCustomerToken(user);
+
+    // Return user without password
+    const userResponse = user.toObject();
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { password: _, ...userWithoutPassword } = userResponse;
+
+    return { user: userWithoutPassword, token };
+  }
+
+  async vendorLogin(loginDto: LoginDto): Promise<{ user: any; token: string }> {
+    const { email, password: loginPassword } = loginDto;
+
+    // Find user
+    const user = await this.userModel.findOne({ email });
+    if (!user) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    // Check if user is active
+    if (!user.isActive) {
+      throw new UnauthorizedException('Account is deactivated');
+    }
+
+    // Verify password
+    const isPasswordValid = await bcrypt.compare(loginPassword, user.password);
+    if (!isPasswordValid) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    // Check if user is a vendor
+    if (user.role !== UserRole.VENDOR) {
+      throw new UnauthorizedException('Invalid username or password');
+    }
+
+    // Update last login
+    user.lastLogin = new Date();
+    await user.save();
+
+    // Generate JWT token with vendor-specific payload
+    const token = this.generateVendorToken(user);
+
+    // Return user without password
+    const userResponse = user.toObject();
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { password: _, ...userWithoutPassword } = userResponse;
+
+    return { user: userWithoutPassword, token };
+  }
+
+  private generateCustomerToken(user: UserDocument): string {
     const payload = {
       sub: user._id,
       email: user.email,
       role: user.role,
       name: user.name,
+      userType: 'customer',
+      // Add customer-specific claims
+      customerId: user._id,
     };
 
-    return this.jwtService.sign(payload);
+    return this.customerJwtService.sign(payload);
+  }
+
+  private generateVendorToken(user: UserDocument): string {
+    const payload = {
+      sub: user._id,
+      email: user.email,
+      role: user.role,
+      name: user.name,
+      userType: 'vendor',
+      // Add vendor-specific claims
+      vendorId: user._id,
+      businessName: user.businessName,
+      category: user.category,
+    };
+
+    return this.vendorJwtService.sign(payload);
   }
 
   // Vendor specific methods

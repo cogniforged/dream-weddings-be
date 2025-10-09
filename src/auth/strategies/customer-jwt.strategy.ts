@@ -1,0 +1,47 @@
+import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { PassportStrategy } from '@nestjs/passport';
+import { ExtractJwt, Strategy } from 'passport-jwt';
+import { ConfigService } from '@nestjs/config';
+import { AuthService } from '../auth.service';
+import { JwtPayload } from '../interfaces/jwt-payload.interface';
+import { UserDocument, UserRole } from '../../schemas/user.schema';
+
+@Injectable()
+export class CustomerJwtStrategy extends PassportStrategy(
+  Strategy,
+  'customer-jwt',
+) {
+  constructor(
+    private authService: AuthService,
+    private configService: ConfigService,
+  ) {
+    const secret = configService.get<string>('CUSTOMER_JWT_SECRET');
+    if (!secret) {
+      throw new Error('CUSTOMER_JWT_SECRET environment variable is required');
+    }
+    super({
+      jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
+      ignoreExpiration: false,
+      secretOrKey: secret,
+    });
+  }
+
+  async validate(payload: JwtPayload): Promise<UserDocument> {
+    // Validate that this is a customer token
+    if (payload.userType !== 'customer' || payload.role !== 'customer') {
+      throw new UnauthorizedException('Invalid token');
+    }
+
+    const user = await this.authService.validateUser(payload.sub);
+    if (!user) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    // Double-check the user role
+    if (user.role !== UserRole.CUSTOMER) {
+      throw new UnauthorizedException('Invalid username or password');
+    }
+
+    return user;
+  }
+}
