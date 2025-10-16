@@ -21,6 +21,17 @@ import {
   UpdateContentStatusDto,
   FeaturedListingDto,
 } from './dto/admin.dto';
+import { EmailService } from '../common/services/email.service';
+import {
+  AdminDashboardStats,
+  AdminAnalytics,
+  RecentActivity,
+  AdminNotifications,
+  PaginatedUsersResponse,
+  PaginatedVendorsResponse,
+  PaginatedContentResponse,
+  FeaturedListingResponse,
+} from './interfaces/admin.interface';
 
 @Injectable()
 export class AdminService {
@@ -31,12 +42,13 @@ export class AdminService {
     @InjectModel(Booking.name) private bookingModel: Model<BookingDocument>,
     @InjectModel(Review.name) private reviewModel: Model<ReviewDocument>,
     @InjectModel(Inquiry.name) private inquiryModel: Model<InquiryDocument>,
+    private emailService: EmailService,
   ) {}
 
-  async getDashboardStats(queryDto: AdminStatsQueryDto): Promise<any> {
+  async getDashboardStats(queryDto: AdminStatsQueryDto): Promise<AdminDashboardStats> {
     const { startDate, endDate, period } = queryDto;
 
-    let dateFilter: any = {};
+    let dateFilter: Record<string, unknown> = {};
     if (startDate && endDate) {
       dateFilter.createdAt = {
         $gte: new Date(startDate),
@@ -143,12 +155,7 @@ export class AdminService {
     };
   }
 
-  async getUsers(queryDto: UserQueryDto): Promise<{
-    users: UserDocument[];
-    total: number;
-    page: number;
-    limit: number;
-  }> {
+  async getUsers(queryDto: UserQueryDto): Promise<PaginatedUsersResponse> {
     const {
       search,
       role,
@@ -159,7 +166,7 @@ export class AdminService {
       limit = 10,
     } = queryDto;
 
-    const filter: any = {};
+    const filter: Record<string, unknown> = {};
 
     if (search) {
       filter.$or = [
@@ -177,7 +184,7 @@ export class AdminService {
       filter.isActive = isActive;
     }
 
-    const sort: any = {};
+    const sort: Record<string, 1 | -1> = {};
     sort[sortBy] = sortOrder === 'asc' ? 1 : -1;
 
     const skip = (page - 1) * limit;
@@ -201,12 +208,7 @@ export class AdminService {
     };
   }
 
-  async getVendors(queryDto: VendorQueryDto): Promise<{
-    vendors: VendorDocument[];
-    total: number;
-    page: number;
-    limit: number;
-  }> {
+  async getVendors(queryDto: VendorQueryDto): Promise<PaginatedVendorsResponse> {
     const {
       search,
       status,
@@ -244,7 +246,7 @@ export class AdminService {
       filter.district = district;
     }
 
-    const sort: any = {};
+    const sort: Record<string, 1 | -1> = {};
     sort[sortBy] = sortOrder === 'asc' ? 1 : -1;
 
     const skip = (page - 1) * limit;
@@ -261,19 +263,14 @@ export class AdminService {
     ]);
 
     return {
-      vendors,
+      data: vendors,
       total,
       page,
       limit,
     };
   }
 
-  async getContent(queryDto: ContentQueryDto): Promise<{
-    content: IdeaDocument[];
-    total: number;
-    page: number;
-    limit: number;
-  }> {
+  async getContent(queryDto: ContentQueryDto): Promise<PaginatedContentResponse> {
     const {
       search,
       type,
@@ -312,7 +309,7 @@ export class AdminService {
       filter.isFeatured = isFeatured;
     }
 
-    const sort: any = {};
+    const sort: Record<string, 1 | -1> = {};
     sort[sortBy] = sortOrder === 'asc' ? 1 : -1;
 
     const skip = (page - 1) * limit;
@@ -357,11 +354,15 @@ export class AdminService {
     updateVendorStatusDto: UpdateVendorStatusDto,
     adminId: string,
   ): Promise<VendorDocument> {
-    const vendor = await this.vendorModel.findById(vendorId).exec();
+    const vendor = await this.vendorModel
+      .findById(vendorId)
+      .populate('userId', 'email firstName lastName')
+      .exec();
     if (!vendor) {
       throw new NotFoundException('Vendor not found');
     }
 
+    const previousStatus = vendor.status;
     vendor.status = updateVendorStatusDto.status;
     vendor.approvedBy = new Types.ObjectId(adminId);
 
@@ -383,7 +384,24 @@ export class AdminService {
       }
     }
 
-    return vendor.save();
+    const savedVendor = await vendor.save();
+
+    // Send email notification to vendor about status change
+    if (previousStatus !== updateVendorStatusDto.status) {
+      try {
+        const user = vendor.userId as any; // Already populated
+        await this.emailService.sendVendorApprovalEmail(
+          user.email,
+          vendor.businessName,
+          updateVendorStatusDto.status,
+          updateVendorStatusDto.rejectionReason,
+        );
+      } catch (error) {
+        console.error('Failed to send vendor approval email:', error);
+      }
+    }
+
+    return savedVendor;
   }
 
   async updateContentStatus(
@@ -415,7 +433,7 @@ export class AdminService {
   async updateFeaturedListing(
     featuredListingDto: FeaturedListingDto,
     adminId: string,
-  ): Promise<{ message: string }> {
+  ): Promise<FeaturedListingResponse> {
     const { itemId, itemType, isFeatured, reason } = featuredListingDto;
 
     if (itemType === 'vendor') {
@@ -445,7 +463,7 @@ export class AdminService {
     return { message: `Featured status updated for ${itemType}` };
   }
 
-  async getRecentActivity(limit: number = 20): Promise<any[]> {
+  async getRecentActivity(limit: number = 20): Promise<RecentActivity[]> {
     const [recentUsers, recentVendors, recentIdeas, recentBookings] =
       await Promise.all([
         this.userModel
@@ -479,23 +497,49 @@ export class AdminService {
       ]);
 
     return [
-      ...recentUsers.map((user) => ({ type: 'user', data: user })),
-      ...recentVendors.map((vendor) => ({ type: 'vendor', data: vendor })),
-      ...recentIdeas.map((idea) => ({ type: 'idea', data: idea })),
-      ...recentBookings.map((booking) => ({ type: 'booking', data: booking })),
+      ...recentUsers.map((user) => ({ type: 'user' as const, data: user.toObject() as unknown as Record<string, unknown> })),
+      ...recentVendors.map((vendor) => ({ type: 'vendor' as const, data: vendor.toObject() as unknown as Record<string, unknown> })),
+      ...recentIdeas.map((idea) => ({ type: 'idea' as const, data: idea.toObject() as unknown as Record<string, unknown> })),
+      ...recentBookings.map((booking) => ({ type: 'booking' as const, data: booking.toObject() as unknown as Record<string, unknown> })),
     ]
       .sort(
         (a, b) =>
-          new Date(b.data.createdAt).getTime() -
-          new Date(a.data.createdAt).getTime(),
+          new Date((b.data.createdAt as unknown as string) || new Date()).getTime() -
+          new Date((a.data.createdAt as unknown as string) || new Date()).getTime(),
       )
       .slice(0, limit);
   }
 
-  async getAnalytics(queryDto: AdminStatsQueryDto): Promise<any> {
+  async getNotifications(): Promise<AdminNotifications> {
+    const pendingVendors = await this.vendorModel
+      .countDocuments({ status: VendorStatus.PENDING, isActive: true })
+      .exec();
+
+    const pendingBookings = await this.bookingModel
+      .countDocuments({ status: 'pending' })
+      .exec();
+
+    const pendingInquiries = await this.inquiryModel
+      .countDocuments({ status: 'pending' })
+      .exec();
+
+    const unverifiedReviews = await this.reviewModel
+      .countDocuments({ isVerified: false })
+      .exec();
+
+    return {
+      pendingVendors,
+      pendingBookings,
+      pendingInquiries,
+      unverifiedReviews,
+      total: pendingVendors + pendingBookings + pendingInquiries + unverifiedReviews,
+    };
+  }
+
+  async getAnalytics(queryDto: AdminStatsQueryDto): Promise<AdminAnalytics> {
     const { startDate, endDate, period } = queryDto;
 
-    let dateFilter: any = {};
+    let dateFilter: Record<string, unknown> = {};
     if (startDate && endDate) {
       dateFilter.createdAt = {
         $gte: new Date(startDate),

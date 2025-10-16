@@ -6,6 +6,7 @@ import {
   IsDateString,
   IsEnum,
 } from 'class-validator';
+import { Transform } from 'class-transformer';
 import { VendorStatus } from '../../schemas/vendor.schema';
 import { UserRole } from '../../schemas/user.schema';
 
@@ -33,6 +34,7 @@ export class UserQueryDto {
   role?: UserRole;
 
   @IsOptional()
+  @Transform(({ value }) => value === 'true')
   @IsBoolean()
   isActive?: boolean;
 
@@ -45,10 +47,12 @@ export class UserQueryDto {
   sortOrder?: 'asc' | 'desc';
 
   @IsOptional()
+  @Transform(({ value }) => parseInt(value))
   @IsNumber()
   page?: number;
 
   @IsOptional()
+  @Transform(({ value }) => parseInt(value))
   @IsNumber()
   limit?: number;
 }
@@ -63,10 +67,12 @@ export class VendorQueryDto {
   status?: VendorStatus;
 
   @IsOptional()
+  @Transform(({ value }) => value === 'true')
   @IsBoolean()
   isVerified?: boolean;
 
   @IsOptional()
+  @Transform(({ value }) => value === 'true')
   @IsBoolean()
   isFeatured?: boolean;
 
@@ -83,10 +89,12 @@ export class VendorQueryDto {
   sortOrder?: 'asc' | 'desc';
 
   @IsOptional()
+  @Transform(({ value }) => parseInt(value))
   @IsNumber()
   page?: number;
 
   @IsOptional()
+  @Transform(({ value }) => parseInt(value))
   @IsNumber()
   limit?: number;
 }
@@ -121,10 +129,12 @@ export class ContentQueryDto {
   sortOrder?: 'asc' | 'desc';
 
   @IsOptional()
+  @Transform(({ value }) => parseInt(value))
   @IsNumber()
   page?: number;
 
   @IsOptional()
+  @Transform(({ value }) => parseInt(value))
   @IsNumber()
   limit?: number;
 }

@@ -13,18 +13,24 @@ import {
   VendorCategory,
 } from '../schemas/vendor.schema';
 import { User, UserDocument, UserRole } from '../schemas/user.schema';
+import { Booking, BookingDocument } from '../schemas/booking.schema';
+import { Inquiry, InquiryDocument } from '../schemas/inquiry.schema';
 import {
   CreateVendorDto,
   UpdateVendorDto,
   VendorQueryDto,
   VendorApprovalDto,
 } from './dto/vendor.dto';
+import { EmailService } from '../common/services/email.service';
 
 @Injectable()
 export class VendorsService {
   constructor(
     @InjectModel(Vendor.name) private vendorModel: Model<VendorDocument>,
     @InjectModel(User.name) private userModel: Model<UserDocument>,
+    @InjectModel(Booking.name) private bookingModel: Model<BookingDocument>,
+    @InjectModel(Inquiry.name) private inquiryModel: Model<InquiryDocument>,
+    private emailService: EmailService,
   ) {}
 
   async create(
@@ -55,7 +61,20 @@ export class VendorsService {
       status: VendorStatus.PENDING,
     });
 
-    return vendor.save();
+    const savedVendor = await vendor.save();
+
+    // Send notification email to admin about new vendor application
+    try {
+      await this.emailService.sendNewVendorNotificationEmail(
+        'admin@dreamweddings.lk', // This should come from config
+        savedVendor.businessName,
+        user.email,
+      );
+    } catch (error) {
+      console.error('Failed to send new vendor notification email:', error);
+    }
+
+    return savedVendor;
   }
 
   async findAll(queryDto: VendorQueryDto): Promise<{
@@ -244,13 +263,17 @@ export class VendorsService {
     approvalDto: VendorApprovalDto,
     adminId: string,
   ): Promise<VendorDocument> {
-    const vendor = await this.vendorModel.findById(id).exec();
+    const vendor = await this.vendorModel
+      .findById(id)
+      .populate('userId', 'email firstName lastName')
+      .exec();
     if (!vendor) {
       throw new NotFoundException('Vendor not found');
     }
 
     // Note: This method is now called by SuperAdmin, so no need to check admin role
 
+    const previousStatus = vendor.status;
     vendor.status = approvalDto.status;
     vendor.approvedBy = new Types.ObjectId(adminId);
 
@@ -261,7 +284,24 @@ export class VendorsService {
       vendor.rejectionReason = approvalDto.rejectionReason;
     }
 
-    return vendor.save();
+    const savedVendor = await vendor.save();
+
+    // Send email notification to vendor about status change
+    if (previousStatus !== approvalDto.status) {
+      try {
+        const user = vendor.userId as any; // Already populated
+        await this.emailService.sendVendorApprovalEmail(
+          user.email,
+          vendor.businessName,
+          approvalDto.status,
+          approvalDto.rejectionReason,
+        );
+      } catch (error) {
+        console.error('Failed to send vendor approval email:', error);
+      }
+    }
+
+    return savedVendor;
   }
 
   async updateRating(vendorId: string, newRating: number): Promise<void> {
@@ -332,6 +372,85 @@ export class VendorsService {
       .populate('userId', 'firstName lastName email phone')
       .sort({ createdAt: -1 })
       .exec();
+  }
+
+  async getAnalytics(userId: string, period: string = '30d'): Promise<any> {
+    const vendor = await this.findByUserId(userId);
+    
+    // Calculate date range based on period
+    const now = new Date();
+    let startDate: Date;
+    
+    switch (period) {
+      case '7d':
+        startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        break;
+      case '30d':
+        startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+        break;
+      case '90d':
+        startDate = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+        break;
+      default:
+        startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    }
+
+    // Get booking statistics
+    const totalBookings = await this.bookingModel.countDocuments({
+      vendorId: vendor._id,
+      isActive: true,
+    }).exec();
+
+    const bookingsThisMonth = await this.bookingModel.countDocuments({
+      vendorId: vendor._id,
+      isActive: true,
+      createdAt: { $gte: startDate },
+    }).exec();
+
+    const bookingsLastMonth = await this.bookingModel.countDocuments({
+      vendorId: vendor._id,
+      isActive: true,
+      createdAt: {
+        $gte: new Date(startDate.getTime() - (now.getTime() - startDate.getTime())),
+        $lt: startDate,
+      },
+    }).exec();
+
+    // Get inquiry statistics
+    const pendingInquiries = await this.inquiryModel.countDocuments({
+      vendorId: vendor._id,
+      status: 'pending',
+    }).exec();
+
+    // Get revenue
+    const revenueData = await this.bookingModel.aggregate([
+      {
+        $match: {
+          vendorId: vendor._id,
+          isActive: true,
+          paymentStatus: 'paid',
+          createdAt: { $gte: startDate },
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          totalRevenue: { $sum: '$totalAmount' },
+        },
+      },
+    ]).exec();
+
+    const revenue = revenueData.length > 0 ? revenueData[0].totalRevenue : 0;
+
+    return {
+      totalBookings,
+      bookingsThisMonth,
+      bookingsLastMonth,
+      pendingInquiries,
+      averageRating: vendor.rating,
+      profileViews: vendor.viewCount,
+      revenue,
+    };
   }
 
   async incrementInquiryCount(vendorId: string): Promise<void> {

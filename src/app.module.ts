@@ -13,6 +13,7 @@ import { ReviewsModule } from './reviews/reviews.module';
 import { PlanningModule } from './planning/planning.module';
 import { AdminModule } from './admin/admin.module';
 import { UploadModule } from './upload/upload.module';
+import { PortfolioModule } from './portfolio/portfolio.module';
 import databaseConfig from './config/database.config';
 import jwtConfig from './config/jwt.config';
 import appConfig from './config/app.config';
@@ -40,6 +41,7 @@ import cloudinaryConfig from './config/cloudinary.config';
     PlanningModule,
     AdminModule,
     UploadModule,
+    PortfolioModule,
   ],
   controllers: [AppController],
   providers: [AppService],

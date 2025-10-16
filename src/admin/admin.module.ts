@@ -10,6 +10,7 @@ import { Booking, BookingSchema } from '../schemas/booking.schema';
 import { Review, ReviewSchema } from '../schemas/review.schema';
 import { Inquiry, InquirySchema } from '../schemas/inquiry.schema';
 import { SuperAdmin, SuperAdminSchema } from '../schemas/super-admin.schema';
+import { EmailService } from '../common/services/email.service';
 
 @Module({
   imports: [
@@ -24,7 +25,7 @@ import { SuperAdmin, SuperAdminSchema } from '../schemas/super-admin.schema';
     ]),
   ],
   controllers: [AdminController],
-  providers: [AdminService, SuperAdminService],
+  providers: [AdminService, SuperAdminService, EmailService],
   exports: [AdminService, SuperAdminService],
 })
 export class AdminModule {}
